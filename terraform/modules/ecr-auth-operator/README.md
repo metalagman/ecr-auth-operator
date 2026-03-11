@@ -5,7 +5,9 @@ This module installs `ecr-auth-operator` with Helm and prepares AWS credentials 
 ## What it creates
 
 - Optional IAM user + access key for the operator (`create_iam_user = true`)
-- IAM inline policy granting `ecr:GetAuthorizationToken`
+- IAM inline policy granting:
+  - `ecr:GetAuthorizationToken`
+  - read-only repository actions for pull (`ecr:BatchGetImage`, `ecr:BatchCheckLayerAvailability`, `ecr:GetDownloadUrlForLayer`)
 - Kubernetes Secret with keys:
   - `aws_access_key_id`
   - `aws_secret_access_key`
@@ -30,6 +32,9 @@ module "ecr_auth_operator" {
   # Keep true to let the module create IAM user + access keys.
   create_iam_user     = true
   iam_user_name       = "ecr-auth-operator"
+
+  # Optional scope (default is ["*"]).
+  ecr_pull_repository_arns = ["arn:aws:ecr:us-east-1:123456789012:repository/*"]
 }
 ```
 

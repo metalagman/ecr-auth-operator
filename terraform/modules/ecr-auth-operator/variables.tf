@@ -22,6 +22,17 @@ variable "iam_user_force_destroy" {
   default     = false
 }
 
+variable "ecr_pull_repository_arns" {
+  description = "ECR repository ARNs allowed for image pull actions. Use [\"*\"] to allow all private ECR repositories."
+  type        = list(string)
+  default     = ["*"]
+
+  validation {
+    condition     = length(var.ecr_pull_repository_arns) > 0
+    error_message = "ecr_pull_repository_arns must contain at least one ARN or \"*\"."
+  }
+}
+
 variable "aws_access_key_id" {
   description = "Existing AWS access key id to use when create_iam_user is false."
   type        = string

@@ -30,6 +30,17 @@ data "aws_iam_policy_document" "operator_ecr_auth" {
       "*"
     ]
   }
+
+  statement {
+    sid    = "AllowECRRepositoryReadOnlyActions"
+    effect = "Allow"
+    actions = [
+      "ecr:BatchGetImage",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+    ]
+    resources = var.ecr_pull_repository_arns
+  }
 }
 
 resource "aws_iam_user_policy" "operator_ecr_auth" {
