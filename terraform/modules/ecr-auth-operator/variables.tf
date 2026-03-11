@@ -1,14 +1,3 @@
-variable "basename" {
-  description = "Base name prefix for AWS IAM resources created by this module (for example: ecr-auth)."
-  type        = string
-  default     = "ecr-auth"
-
-  validation {
-    condition     = length(trimspace(var.basename)) > 0
-    error_message = "basename must not be empty."
-  }
-}
-
 variable "create_iam_user" {
   description = "Create a dedicated IAM user and access key for the operator."
   type        = bool
@@ -16,9 +5,9 @@ variable "create_iam_user" {
 }
 
 variable "iam_user_name" {
-  description = "IAM user name to create when create_iam_user is true. Null uses <basename>-operator."
+  description = "IAM user name to create when create_iam_user is true."
   type        = string
-  default     = null
+  default     = "ecr-auth-operator"
 }
 
 variable "iam_user_path" {

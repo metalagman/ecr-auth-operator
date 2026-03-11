@@ -21,16 +21,10 @@ variable "create_iam_user" {
   default     = true
 }
 
-variable "basename" {
-  description = "Base name prefix for AWS IAM resources (for example: ecr-auth)."
-  type        = string
-  default     = "ecr-auth"
-}
-
 variable "iam_user_name" {
   description = "IAM user name when create_iam_user is true."
   type        = string
-  default     = null
+  default     = "ecr-auth-operator"
 }
 
 variable "aws_access_key_id" {

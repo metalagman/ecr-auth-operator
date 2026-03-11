@@ -1,9 +1,4 @@
 locals {
-  basename = trimspace(var.basename)
-
-  effective_iam_user_name = (
-    var.iam_user_name != null && trimspace(var.iam_user_name) != ""
-  ) ? trimspace(var.iam_user_name) : "${local.basename}-operator"
   credentials_secret_namespace = coalesce(var.credentials_secret_namespace, var.operator_namespace)
 
   operator_namespace_effective = var.create_namespace ? kubernetes_namespace_v1.operator[0].metadata[0].name : var.operator_namespace
@@ -19,7 +14,7 @@ locals {
 resource "aws_iam_user" "operator" {
   count = var.create_iam_user ? 1 : 0
 
-  name          = local.effective_iam_user_name
+  name          = var.iam_user_name
   path          = var.iam_user_path
   force_destroy = var.iam_user_force_destroy
 }
@@ -40,7 +35,7 @@ data "aws_iam_policy_document" "operator_ecr_auth" {
 resource "aws_iam_user_policy" "operator_ecr_auth" {
   count = var.create_iam_user ? 1 : 0
 
-  name   = "${local.effective_iam_user_name}-ecr-auth"
+  name   = "${var.iam_user_name}-ecr-auth"
   user   = aws_iam_user.operator[0].name
   policy = data.aws_iam_policy_document.operator_ecr_auth[0].json
 }

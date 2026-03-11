@@ -36,7 +36,6 @@ provider "helm" {
 module "ecr_auth_operator" {
   source = "../../modules/ecr-auth-operator"
 
-  basename              = var.basename
   create_iam_user       = var.create_iam_user
   iam_user_name         = var.iam_user_name
   aws_access_key_id     = var.aws_access_key_id
