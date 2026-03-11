@@ -6,6 +6,7 @@
 aws_region        = "us-east-1"
 kubeconfig_path   = "~/.kube/config"
 kubeconfig_context = ""
+basename          = "ecr-auth"
 
 # By default this example creates IAM user + access key for the operator.
 create_iam_user = true

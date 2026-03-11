@@ -21,10 +21,16 @@ variable "create_iam_user" {
   default     = true
 }
 
+variable "basename" {
+  description = "Base resource name prefix (for example: ecr-auth)."
+  type        = string
+  default     = "ecr-auth"
+}
+
 variable "iam_user_name" {
   description = "IAM user name when create_iam_user is true."
   type        = string
-  default     = "ecr-auth-operator"
+  default     = null
 }
 
 variable "aws_access_key_id" {
@@ -49,8 +55,9 @@ variable "aws_session_token" {
 }
 
 variable "operator_namespace" {
-  type    = string
-  default = "ecr-auth-operator-system"
+  description = "Optional explicit namespace override."
+  type        = string
+  default     = null
 }
 
 variable "create_namespace" {
@@ -59,8 +66,9 @@ variable "create_namespace" {
 }
 
 variable "credentials_secret_name" {
-  type    = string
-  default = "aws-credentials"
+  description = "Optional explicit credentials secret name override."
+  type        = string
+  default     = null
 }
 
 variable "credentials_secret_namespace" {
@@ -69,8 +77,9 @@ variable "credentials_secret_namespace" {
 }
 
 variable "release_name" {
-  type    = string
-  default = "ecr-auth-operator"
+  description = "Optional explicit Helm release name override."
+  type        = string
+  default     = null
 }
 
 variable "chart_repository" {

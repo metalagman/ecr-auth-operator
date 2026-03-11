@@ -1,3 +1,14 @@
+variable "basename" {
+  description = "Base name prefix used for default resource names (for example: ecr-auth)."
+  type        = string
+  default     = "ecr-auth"
+
+  validation {
+    condition     = length(trimspace(var.basename)) > 0
+    error_message = "basename must not be empty."
+  }
+}
+
 variable "create_iam_user" {
   description = "Create a dedicated IAM user and access key for the operator."
   type        = bool
@@ -5,9 +16,9 @@ variable "create_iam_user" {
 }
 
 variable "iam_user_name" {
-  description = "IAM user name to create when create_iam_user is true."
+  description = "IAM user name to create when create_iam_user is true. Null uses <basename>-operator."
   type        = string
-  default     = "ecr-auth-operator"
+  default     = null
 }
 
 variable "iam_user_path" {
@@ -54,9 +65,9 @@ variable "aws_session_token" {
 }
 
 variable "operator_namespace" {
-  description = "Namespace where the operator Helm release is installed."
+  description = "Namespace where the operator Helm release is installed. Null uses <basename>-operator-system."
   type        = string
-  default     = "ecr-auth-operator-system"
+  default     = null
 }
 
 variable "create_namespace" {
@@ -66,9 +77,9 @@ variable "create_namespace" {
 }
 
 variable "credentials_secret_name" {
-  description = "Name of the Kubernetes Secret containing AWS credentials for the operator."
+  description = "Name of the Kubernetes Secret containing AWS credentials for the operator. Null uses <basename>-aws-credentials."
   type        = string
-  default     = "aws-credentials"
+  default     = null
 }
 
 variable "credentials_secret_namespace" {
@@ -78,9 +89,9 @@ variable "credentials_secret_namespace" {
 }
 
 variable "release_name" {
-  description = "Helm release name."
+  description = "Helm release name. Null uses <basename>-operator."
   type        = string
-  default     = "ecr-auth-operator"
+  default     = null
 }
 
 variable "chart_repository" {
