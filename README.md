@@ -147,6 +147,17 @@ helm upgrade --install ecr-auth-operator charts/ecr-auth-operator \
   --set awsCredentials.secretNamespace=ecr-auth-operator-system
 ```
 
+## OCI Release Publishing
+
+GitHub Actions publishes OCI artifacts on semver tags (`vX.Y.Z`) using Taskfile release targets.
+
+- Controller image: `ghcr.io/metalagman/ecr-auth-operator:<version>` and `:latest`
+- Helm chart: `oci://ghcr.io/metalagman/charts/ecr-auth-operator:<version>`
+
+The release workflow is defined in:
+
+- `.github/workflows/release.yml`
+
 ## Operational Notes
 
 - Managed secrets are labeled `ecr.metalagman.dev/managed-by=ecr-auth-operator`.

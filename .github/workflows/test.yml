@@ -17,7 +17,8 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Setup Task
+        uses: arduino/setup-task@v2
+
       - name: Running Tests
-        run: |
-          go mod tidy
-          make test
+        run: task test

@@ -17,7 +17,8 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Run linter
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.1.0
+      - name: Setup Task
+        uses: arduino/setup-task@v2
+
+      - name: Run lint
+        run: task lint

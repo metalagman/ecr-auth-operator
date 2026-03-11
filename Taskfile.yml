@@ -4,7 +4,13 @@ vars:
   LOCALBIN: '{{.ROOT_DIR}}/bin'
   CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen'
   ENVTEST: '{{.LOCALBIN}}/setup-envtest'
+  GOLANGCI_LINT: '{{.LOCALBIN}}/golangci-lint'
   CONTROLLER_TOOLS_VERSION: v0.18.0
+  GOLANGCI_LINT_VERSION: v2.1.0
+  KIND_CLUSTER: ecr-auth-operator-test-e2e
+  IMAGE_REPO: ghcr.io/metalagman/ecr-auth-operator
+  CHART_OCI_REPO: oci://ghcr.io/metalagman/charts
+  PLATFORMS: linux/amd64,linux/arm64
 
 env:
   GOCACHE: '{{.ROOT_DIR}}/.cache/go-build'
@@ -26,6 +32,10 @@ tasks:
       - |
         if [ ! -x "{{.ENVTEST}}" ]; then
           GOBIN="{{.LOCALBIN}}" go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.21
+        fi
+      - |
+        if [ ! -x "{{.GOLANGCI_LINT}}" ]; then
+          GOBIN="{{.LOCALBIN}}" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}}
         fi
 
   manifests:
@@ -50,6 +60,12 @@ tasks:
     cmds:
       - go vet ./...
 
+  lint:
+    desc: Run golangci-lint
+    deps: [tools]
+    cmds:
+      - '{{.GOLANGCI_LINT}} run'
+
   test:
     desc: Run unit and envtest-based controller tests (excluding e2e)
     deps: [manifests, generate, tools]
@@ -60,6 +76,18 @@ tasks:
       - |
         KUBEBUILDER_ASSETS="$({{.ENVTEST}} use ${ENVTEST_K8S_VERSION} --bin-dir {{.LOCALBIN}} -p path)" \
         go test $(go list ./... | grep -v /e2e) -coverprofile cover.out
+
+  test-e2e:
+    desc: Run end-to-end tests with kind
+    deps: [manifests, generate, vet]
+    cmds:
+      - |
+        if kind get clusters | grep -qx "{{.KIND_CLUSTER}}"; then
+          kind delete cluster --name "{{.KIND_CLUSTER}}"
+        fi
+        kind create cluster --name "{{.KIND_CLUSTER}}"
+        trap 'kind delete cluster --name "{{.KIND_CLUSTER}}"' EXIT
+        KIND_CLUSTER="{{.KIND_CLUSTER}}" go test ./test/e2e/ -v -ginkgo.v
 
   build:
     desc: Build manager binary
@@ -76,3 +104,37 @@ tasks:
     desc: Render Helm chart templates
     cmds:
       - helm template ecr-auth-operator charts/ecr-auth-operator > /dev/null
+
+  release:image:
+    desc: Build and publish the controller OCI image
+    cmds:
+      - |
+        : "${VERSION:?VERSION is required}"
+        docker buildx inspect ecr-auth-operator-builder >/dev/null 2>&1 || docker buildx create --name ecr-auth-operator-builder --driver docker-container
+        docker buildx use ecr-auth-operator-builder
+        docker buildx build \
+          --platform "{{.PLATFORMS}}" \
+          --push \
+          -t "{{.IMAGE_REPO}}:${VERSION}" \
+          -t "{{.IMAGE_REPO}}:latest" \
+          .
+
+  release:chart:
+    desc: Package and publish the Helm chart to OCI
+    cmds:
+      - |
+        : "${VERSION:?VERSION is required}"
+        tmp_dir="$(mktemp -d)"
+        trap 'rm -rf "${tmp_dir}"' EXIT
+        helm package charts/ecr-auth-operator \
+          --version "${VERSION}" \
+          --app-version "${VERSION}" \
+          --destination "${tmp_dir}"
+        helm push "${tmp_dir}/ecr-auth-operator-${VERSION}.tgz" "{{.CHART_OCI_REPO}}"
+
+  release:all:
+    desc: Run validation and publish image/chart artifacts
+    deps: [lint, test, helm-lint, helm-template]
+    cmds:
+      - task: release:image
+      - task: release:chart

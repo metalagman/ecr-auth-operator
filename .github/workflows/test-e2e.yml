@@ -17,6 +17,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Setup Task
+        uses: arduino/setup-task@v2
+
       - name: Install the latest version of kind
         run: |
           curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
@@ -27,6 +30,4 @@ jobs:
         run: kind version
 
       - name: Running Test e2e
-        run: |
-          go mod tidy
-          make test-e2e
+        run: task test-e2e
