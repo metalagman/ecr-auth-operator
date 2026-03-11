@@ -68,7 +68,7 @@ var errConditionUpdateFailed = errors.New("condition update failed")
 
 // ECRTokenProvider fetches docker auth credentials from ECR.
 type ECRTokenProvider interface {
-	GetAuthorizationToken(ctx context.Context, spec ecrv1alpha1.ECRAuthSpec) (*ECRAuthorizationToken, error)
+	GetAuthorizationTokens(ctx context.Context, spec ecrv1alpha1.ECRAuthSpec) ([]ECRAuthorizationToken, error)
 }
 
 // ECRAuthorizationToken is normalized ECR token data used to build docker config.
@@ -157,17 +157,17 @@ func (r *ECRAuthReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
-	token, err := refreshProvider.GetAuthorizationToken(ctx, auth.Spec)
+	tokens, err := refreshProvider.GetAuthorizationTokens(ctx, auth.Spec)
 	if err != nil {
-		msg := fmt.Sprintf("failed to fetch ECR authorization token: %v", err)
+		msg := fmt.Sprintf("failed to fetch ECR authorization tokens: %v", err)
 		if statusErr := r.setCondition(ctx, &auth, metav1.ConditionFalse, reasonAuthFetchFailed, msg, nil); statusErr != nil {
 			return ctrl.Result{}, fmt.Errorf("%w: %v", errConditionUpdateFailed, statusErr)
 		}
-		logger.Error(err, "failed to get authorization token")
+		logger.Error(err, "failed to get authorization tokens")
 		return ctrl.Result{RequeueAfter: minDuration(refreshInterval, authErrorRetryInterval)}, nil
 	}
 
-	dockerConfigJSON, err := buildDockerConfigJSON(token.ProxyEndpoint, token.Username, token.Password)
+	dockerConfigJSON, err := buildDockerConfigJSON(tokens)
 	if err != nil {
 		if statusErr := r.setCondition(ctx, &auth, metav1.ConditionFalse, reasonAuthFetchFailed, err.Error(), nil); statusErr != nil {
 			return ctrl.Result{}, fmt.Errorf("%w: %v", errConditionUpdateFailed, statusErr)
@@ -317,8 +317,23 @@ func validateSpec(spec ecrv1alpha1.ECRAuthSpec) error {
 		}
 	}
 
-	if strings.TrimSpace(spec.Region) == "" {
-		allErrs = append(allErrs, field.Required(path.Child("region"), "region must be set"))
+	if len(spec.Registries) == 0 {
+		allErrs = append(allErrs, field.Required(path.Child("registries"), "registries must contain at least one registry endpoint"))
+	}
+
+	seenRegistries := map[string]struct{}{}
+	for i, rawRegistry := range spec.Registries {
+		parsed, err := parseECRRegistry(rawRegistry)
+		if err != nil {
+			allErrs = append(allErrs, field.Invalid(path.Child("registries").Index(i), rawRegistry, err.Error()))
+			continue
+		}
+		key := registryKey(parsed.AccountID, parsed.Region)
+		if _, exists := seenRegistries[key]; exists {
+			allErrs = append(allErrs, field.Duplicate(path.Child("registries").Index(i), rawRegistry))
+			continue
+		}
+		seenRegistries[key] = struct{}{}
 	}
 
 	if spec.RefreshInterval != nil && spec.RefreshInterval.Duration <= 0 {
@@ -362,17 +377,9 @@ func secretOwnedBy(secret *corev1.Secret, auth *ecrv1alpha1.ECRAuth) bool {
 	return metav1.IsControlledBy(secret, auth)
 }
 
-func buildDockerConfigJSON(registry, username, password string) ([]byte, error) {
-	registry = strings.TrimSpace(registry)
-	username = strings.TrimSpace(username)
-	if registry == "" {
-		return nil, errors.New("registry endpoint must be set")
-	}
-	if username == "" {
-		return nil, errors.New("username must be set")
-	}
-	if password == "" {
-		return nil, errors.New("password must be set")
+func buildDockerConfigJSON(tokens []ECRAuthorizationToken) ([]byte, error) {
+	if len(tokens) == 0 {
+		return nil, errors.New("at least one authorization token is required")
 	}
 
 	type authEntry struct {
@@ -384,15 +391,30 @@ func buildDockerConfigJSON(registry, username, password string) ([]byte, error) 
 		Auths map[string]authEntry `json:"auths"`
 	}
 
-	encodedAuth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-	payload := dockerConfig{
-		Auths: map[string]authEntry{
-			registry: {
-				Auth:     encodedAuth,
-				Username: username,
-				Password: password,
-			},
-		},
+	payload := dockerConfig{Auths: map[string]authEntry{}}
+	for i := range tokens {
+		registry := strings.TrimSpace(tokens[i].ProxyEndpoint)
+		username := strings.TrimSpace(tokens[i].Username)
+		password := tokens[i].Password
+		if registry == "" {
+			return nil, fmt.Errorf("token %d: registry endpoint must be set", i)
+		}
+		if username == "" {
+			return nil, fmt.Errorf("token %d: username must be set", i)
+		}
+		if password == "" {
+			return nil, fmt.Errorf("token %d: password must be set", i)
+		}
+		if _, exists := payload.Auths[registry]; exists {
+			return nil, fmt.Errorf("duplicate registry endpoint in tokens: %s", registry)
+		}
+
+		encodedAuth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+		payload.Auths[registry] = authEntry{
+			Auth:     encodedAuth,
+			Username: username,
+			Password: password,
+		}
 	}
 
 	out, err := json.Marshal(payload)

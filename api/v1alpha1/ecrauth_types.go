@@ -27,9 +27,11 @@ type ECRAuthSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	SecretName string `json:"secretName"`
 
-	// Region is the AWS region used for ECR token retrieval.
-	// +kubebuilder:validation:MinLength=1
-	Region string `json:"region"`
+	// Registries is the list of ECR registry endpoints to authorize.
+	// Each item must be a private ECR registry endpoint like:
+	// 123456789012.dkr.ecr.us-east-1.amazonaws.com
+	// +kubebuilder:validation:MinItems=1
+	Registries []string `json:"registries"`
 
 	// RefreshInterval controls how often credentials are refreshed.
 	// +kubebuilder:default:="11h"

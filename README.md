@@ -8,6 +8,7 @@ It watches namespaced `ECRAuth` custom resources (`ecr.metalagman.dev/v1alpha1`)
 
 - Watches `ECRAuth` resources across all namespaces.
 - Retrieves ECR auth tokens using static AWS credentials from a controller-global Kubernetes Secret.
+- Derives AWS region from each registry endpoint in `spec.registries`.
 - Creates or updates a managed pull secret (`spec.secretName`).
 - Rejects unsafe cases:
   - Existing foreign secret with same name is not overwritten.
@@ -28,7 +29,8 @@ It watches namespaced `ECRAuth` custom resources (`ecr.metalagman.dev/v1alpha1`)
 ### Spec
 
 - `secretName` (string, required): managed target secret name.
-- `region` (string, required): AWS region for ECR token retrieval.
+- `registries` (list, required): private ECR registry endpoints to include in the managed Docker config secret.
+  Example item: `123456789012.dkr.ecr.us-east-1.amazonaws.com`
 - `refreshInterval` (duration, optional, default `11h`): refresh cadence.
 
 ### Status
@@ -48,7 +50,9 @@ metadata:
   namespace: app
 spec:
   secretName: regcred
-  region: us-east-1
+  registries:
+    - 123456789012.dkr.ecr.us-east-1.amazonaws.com
+    - 210987654321.dkr.ecr.eu-west-1.amazonaws.com
   refreshInterval: 11h
 ```
 

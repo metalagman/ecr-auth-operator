@@ -46,11 +46,11 @@ type KubernetesSecretECRTokenProvider struct {
 	SecretRef types.NamespacedName
 }
 
-// GetAuthorizationToken returns decoded ECR auth credentials and endpoint.
-func (p *KubernetesSecretECRTokenProvider) GetAuthorizationToken(
+// GetAuthorizationTokens returns decoded ECR auth credentials keyed by requested registries.
+func (p *KubernetesSecretECRTokenProvider) GetAuthorizationTokens(
 	ctx context.Context,
 	spec ecrv1alpha1.ECRAuthSpec,
-) (*ECRAuthorizationToken, error) {
+) ([]ECRAuthorizationToken, error) {
 	if p.Client == nil {
 		return nil, fmt.Errorf("aws credentials provider client is not configured")
 	}
@@ -58,54 +58,122 @@ func (p *KubernetesSecretECRTokenProvider) GetAuthorizationToken(
 		return nil, fmt.Errorf("aws credentials secret reference is not fully configured")
 	}
 
+	requestedRegistries := make([]parsedRegistry, 0, len(spec.Registries))
+	seenRegistryKeys := map[string]struct{}{}
+	registryOrder := make([]string, 0, len(spec.Registries))
+	registryByKey := map[string]parsedRegistry{}
+	regionOrder := []string{}
+	regionSeen := map[string]struct{}{}
+	registryIDsByRegion := map[string][]string{}
+	seenRegistryIDsByRegion := map[string]map[string]struct{}{}
+
+	for _, rawRegistry := range spec.Registries {
+		parsed, err := parseECRRegistry(rawRegistry)
+		if err != nil {
+			return nil, err
+		}
+
+		key := registryKey(parsed.AccountID, parsed.Region)
+		if _, exists := seenRegistryKeys[key]; exists {
+			continue
+		}
+		seenRegistryKeys[key] = struct{}{}
+		requestedRegistries = append(requestedRegistries, parsed)
+		registryOrder = append(registryOrder, key)
+		registryByKey[key] = parsed
+
+		if _, exists := regionSeen[parsed.Region]; !exists {
+			regionSeen[parsed.Region] = struct{}{}
+			regionOrder = append(regionOrder, parsed.Region)
+			seenRegistryIDsByRegion[parsed.Region] = map[string]struct{}{}
+		}
+		if _, exists := seenRegistryIDsByRegion[parsed.Region][parsed.AccountID]; !exists {
+			seenRegistryIDsByRegion[parsed.Region][parsed.AccountID] = struct{}{}
+			registryIDsByRegion[parsed.Region] = append(registryIDsByRegion[parsed.Region], parsed.AccountID)
+		}
+	}
+	if len(requestedRegistries) == 0 {
+		return nil, fmt.Errorf("at least one registry must be configured")
+	}
+
 	creds, err := p.loadStaticCredentials(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	cfg, err := config.LoadDefaultConfig(
-		ctx,
-		config.WithRegion(spec.Region),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			creds.accessKeyID,
-			creds.secretAccessKey,
-			creds.sessionToken,
-		)),
+	credentialProvider := credentials.NewStaticCredentialsProvider(
+		creds.accessKeyID,
+		creds.secretAccessKey,
+		creds.sessionToken,
 	)
-	if err != nil {
-		return nil, fmt.Errorf("load aws config: %w", err)
+
+	tokensByRegistryKey := map[string]ECRAuthorizationToken{}
+	for _, region := range regionOrder {
+		cfg, err := config.LoadDefaultConfig(
+			ctx,
+			config.WithRegion(region),
+			config.WithCredentialsProvider(credentialProvider),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("load aws config for region %s: %w", region, err)
+		}
+
+		ecrClient := ecr.NewFromConfig(cfg)
+		out, err := ecrClient.GetAuthorizationToken(ctx, &ecr.GetAuthorizationTokenInput{
+			RegistryIds: registryIDsByRegion[region],
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get ecr authorization token for region %s: %w", region, err)
+		}
+		if len(out.AuthorizationData) == 0 {
+			return nil, fmt.Errorf("get ecr authorization token for region %s: empty authorizationData", region)
+		}
+
+		for _, authData := range out.AuthorizationData {
+			if authData.AuthorizationToken == nil || *authData.AuthorizationToken == "" {
+				return nil, fmt.Errorf("get ecr authorization token for region %s: empty token", region)
+			}
+
+			username, password, err := decodeAuthorizationToken(aws.ToString(authData.AuthorizationToken))
+			if err != nil {
+				return nil, err
+			}
+
+			endpoint := strings.TrimSpace(aws.ToString(authData.ProxyEndpoint))
+			if endpoint == "" {
+				return nil, fmt.Errorf("get ecr authorization token for region %s: empty proxy endpoint", region)
+			}
+
+			parsedEndpoint, err := parseECRRegistry(endpoint)
+			if err != nil {
+				return nil, fmt.Errorf("get ecr authorization token for region %s: invalid proxy endpoint %q: %w", region, endpoint, err)
+			}
+
+			key := registryKey(parsedEndpoint.AccountID, parsedEndpoint.Region)
+			tokensByRegistryKey[key] = ECRAuthorizationToken{
+				ProxyEndpoint: parsedEndpoint.Endpoint,
+				Username:      username,
+				Password:      password,
+				ExpiresAt:     authData.ExpiresAt,
+			}
+		}
 	}
 
-	ecrClient := ecr.NewFromConfig(cfg)
-	out, err := ecrClient.GetAuthorizationToken(ctx, &ecr.GetAuthorizationTokenInput{})
-	if err != nil {
-		return nil, fmt.Errorf("get ecr authorization token: %w", err)
+	missingRegistries := []string{}
+	for _, key := range registryOrder {
+		if _, ok := tokensByRegistryKey[key]; !ok {
+			missingRegistries = append(missingRegistries, registryByKey[key].Endpoint)
+		}
 	}
-	if len(out.AuthorizationData) == 0 {
-		return nil, fmt.Errorf("get ecr authorization token: empty authorizationData")
-	}
-
-	authData := out.AuthorizationData[0]
-	if authData.AuthorizationToken == nil || *authData.AuthorizationToken == "" {
-		return nil, fmt.Errorf("get ecr authorization token: empty token")
+	if len(missingRegistries) > 0 {
+		return nil, fmt.Errorf("missing authorization data for registries: %s", strings.Join(missingRegistries, ", "))
 	}
 
-	username, password, err := decodeAuthorizationToken(aws.ToString(authData.AuthorizationToken))
-	if err != nil {
-		return nil, err
+	tokens := make([]ECRAuthorizationToken, 0, len(registryOrder))
+	for _, key := range registryOrder {
+		tokens = append(tokens, tokensByRegistryKey[key])
 	}
-
-	endpoint := strings.TrimSpace(aws.ToString(authData.ProxyEndpoint))
-	if endpoint == "" {
-		return nil, fmt.Errorf("get ecr authorization token: empty proxy endpoint")
-	}
-
-	return &ECRAuthorizationToken{
-		ProxyEndpoint: endpoint,
-		Username:      username,
-		Password:      password,
-		ExpiresAt:     authData.ExpiresAt,
-	}, nil
+	return tokens, nil
 }
 
 type staticAWSCredentials struct {

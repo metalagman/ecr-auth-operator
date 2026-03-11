@@ -7,5 +7,7 @@ metadata:
   name: ecrauth-sample
 spec:
   secretName: regcred
-  region: us-east-1
+  registries:
+    - 123456789012.dkr.ecr.us-east-1.amazonaws.com
+    - 210987654321.dkr.ecr.eu-west-1.amazonaws.com
   refreshInterval: 11h

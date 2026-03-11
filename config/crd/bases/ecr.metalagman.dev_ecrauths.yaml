@@ -52,10 +52,15 @@ spec:
                 default: 11h
                 description: RefreshInterval controls how often credentials are refreshed.
                 type: string
-              region:
-                description: Region is the AWS region used for ECR token retrieval.
-                minLength: 1
-                type: string
+              registries:
+                description: |-
+                  Registries is the list of ECR registry endpoints to authorize.
+                  Each item must be a private ECR registry endpoint like:
+                  123456789012.dkr.ecr.us-east-1.amazonaws.com
+                items:
+                  type: string
+                minItems: 1
+                type: array
               secretName:
                 description: |-
                   SecretName is the managed pull-secret name that will be created/updated in
@@ -63,7 +68,7 @@ spec:
                 minLength: 1
                 type: string
             required:
-            - region
+            - registries
             - secretName
             type: object
           status:

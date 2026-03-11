@@ -120,7 +120,9 @@ func TestProviderConfigurationValidation(t *testing.T) {
 	t.Parallel()
 
 	provider := &KubernetesSecretECRTokenProvider{}
-	_, err := provider.GetAuthorizationToken(context.Background(), ecrv1alpha1.ECRAuthSpec{Region: "us-east-1"})
+	_, err := provider.GetAuthorizationTokens(context.Background(), ecrv1alpha1.ECRAuthSpec{
+		Registries: []string{"123456789012.dkr.ecr.us-east-1.amazonaws.com"},
+	})
 	if err == nil {
 		t.Fatalf("expected provider configuration error")
 	}

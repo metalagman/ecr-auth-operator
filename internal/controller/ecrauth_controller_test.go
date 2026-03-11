@@ -32,15 +32,15 @@ import (
 )
 
 type fakeTokenProvider struct {
-	token *ECRAuthorizationToken
-	err   error
+	tokens []ECRAuthorizationToken
+	err    error
 }
 
-func (f *fakeTokenProvider) GetAuthorizationToken(_ context.Context, _ ecrv1alpha1.ECRAuthSpec) (*ECRAuthorizationToken, error) {
+func (f *fakeTokenProvider) GetAuthorizationTokens(_ context.Context, _ ecrv1alpha1.ECRAuthSpec) ([]ECRAuthorizationToken, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	return f.token, nil
+	return f.tokens, nil
 }
 
 func readyCondition(resource *ecrv1alpha1.ECRAuth) *metav1.Condition {
@@ -57,17 +57,24 @@ var _ = Describe("ECRAuth Controller", func() {
 		ctx        context.Context
 		namespace  string
 		fixedNow   time.Time
-		baseToken  *ECRAuthorizationToken
+		baseTokens []ECRAuthorizationToken
 		reconciler *ECRAuthReconciler
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
 		fixedNow = time.Date(2026, 3, 11, 7, 0, 0, 0, time.UTC)
-		baseToken = &ECRAuthorizationToken{
-			ProxyEndpoint: "https://123456789012.dkr.ecr.us-east-1.amazonaws.com",
-			Username:      "AWS",
-			Password:      "token-password",
+		baseTokens = []ECRAuthorizationToken{
+			{
+				ProxyEndpoint: "https://123456789012.dkr.ecr.us-east-1.amazonaws.com",
+				Username:      "AWS",
+				Password:      "token-password",
+			},
+			{
+				ProxyEndpoint: "https://210987654321.dkr.ecr.eu-west-1.amazonaws.com",
+				Username:      "AWS",
+				Password:      "token-password-2",
+			},
 		}
 
 		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: "ecrauth-test-"}}
@@ -77,7 +84,7 @@ var _ = Describe("ECRAuth Controller", func() {
 		reconciler = &ECRAuthReconciler{
 			Client:        k8sClient,
 			Scheme:        k8sClient.Scheme(),
-			TokenProvider: &fakeTokenProvider{token: baseToken},
+			TokenProvider: &fakeTokenProvider{tokens: baseTokens},
 			Now: func() time.Time {
 				return fixedNow
 			},
@@ -94,7 +101,10 @@ var _ = Describe("ECRAuth Controller", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "auth-a", Namespace: namespace},
 			Spec: ecrv1alpha1.ECRAuthSpec{
 				SecretName: "regcred",
-				Region:     "us-east-1",
+				Registries: []string{
+					"123456789012.dkr.ecr.us-east-1.amazonaws.com",
+					"210987654321.dkr.ecr.eu-west-1.amazonaws.com",
+				},
 			},
 		}
 		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -112,6 +122,8 @@ var _ = Describe("ECRAuth Controller", func() {
 		Expect(secret.Data).To(HaveKey(dockerConfigJSONKey))
 		Expect(secret.Labels).To(HaveKeyWithValue(managedByLabelKey, managedByLabelValue))
 		Expect(secret.Annotations).To(HaveKey(ownerUIDAnnotation))
+		Expect(string(secret.Data[dockerConfigJSONKey])).To(ContainSubstring("123456789012.dkr.ecr.us-east-1.amazonaws.com"))
+		Expect(string(secret.Data[dockerConfigJSONKey])).To(ContainSubstring("210987654321.dkr.ecr.eu-west-1.amazonaws.com"))
 
 		updated := &ecrv1alpha1.ECRAuth{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: resource.Name}, updated)).To(Succeed())
@@ -135,7 +147,7 @@ var _ = Describe("ECRAuth Controller", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "auth-b", Namespace: namespace},
 			Spec: ecrv1alpha1.ECRAuthSpec{
 				SecretName: "regcred",
-				Region:     "us-east-1",
+				Registries: []string{"123456789012.dkr.ecr.us-east-1.amazonaws.com"},
 			},
 		}
 		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -162,11 +174,11 @@ var _ = Describe("ECRAuth Controller", func() {
 	It("rejects second ECRAuth managing same secret", func() {
 		primary := &ecrv1alpha1.ECRAuth{
 			ObjectMeta: metav1.ObjectMeta{Name: "auth-c1", Namespace: namespace},
-			Spec:       ecrv1alpha1.ECRAuthSpec{SecretName: "regcred", Region: "us-east-1"},
+			Spec:       ecrv1alpha1.ECRAuthSpec{SecretName: "regcred", Registries: []string{"123456789012.dkr.ecr.us-east-1.amazonaws.com"}},
 		}
 		secondary := &ecrv1alpha1.ECRAuth{
 			ObjectMeta: metav1.ObjectMeta{Name: "auth-c2", Namespace: namespace},
-			Spec:       ecrv1alpha1.ECRAuthSpec{SecretName: "regcred", Region: "us-east-1"},
+			Spec:       ecrv1alpha1.ECRAuthSpec{SecretName: "regcred", Registries: []string{"123456789012.dkr.ecr.us-east-1.amazonaws.com"}},
 		}
 
 		Expect(k8sClient.Create(ctx, primary)).To(Succeed())
@@ -197,7 +209,7 @@ var _ = Describe("ECRAuth Controller", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "auth-d", Namespace: namespace},
 			Spec: ecrv1alpha1.ECRAuthSpec{
 				SecretName:      "regcred-custom",
-				Region:          "us-east-1",
+				Registries:      []string{"123456789012.dkr.ecr.us-east-1.amazonaws.com"},
 				RefreshInterval: &metav1.Duration{Duration: 2 * time.Hour},
 			},
 		}
@@ -218,7 +230,7 @@ var _ = Describe("ECRAuth Controller", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "auth-e", Namespace: namespace},
 			Spec: ecrv1alpha1.ECRAuthSpec{
 				SecretName: "regcred",
-				Region:     "us-east-1",
+				Registries: []string{"123456789012.dkr.ecr.us-east-1.amazonaws.com"},
 			},
 		}
 		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
