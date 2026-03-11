@@ -151,6 +151,21 @@ helm upgrade --install ecr-auth-operator charts/ecr-auth-operator \
   --set awsCredentials.secretNamespace=ecr-auth-operator-system
 ```
 
+## Deploy with Terraform
+
+This repo includes a Terraform module that provisions IAM credentials, creates the Kubernetes AWS credentials secret, and installs the Helm chart:
+
+- Module: `terraform/modules/ecr-auth-operator`
+- Example: `terraform/examples/ecr-auth-operator`
+
+Quick start:
+
+```sh
+cd terraform/examples/ecr-auth-operator
+terraform init
+terraform apply
+```
+
 ## OCI Release Publishing
 
 GitHub Actions publishes OCI artifacts on semver tags (`vX.Y.Z`) using Taskfile release targets.

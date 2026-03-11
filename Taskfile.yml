@@ -105,6 +105,20 @@ tasks:
     cmds:
       - helm template ecr-auth-operator charts/ecr-auth-operator > /dev/null
 
+  terraform:fmt:
+    desc: Format Terraform code
+    cmds:
+      - terraform fmt -recursive terraform
+
+  terraform:validate:
+    desc: Validate Terraform module and example
+    cmds:
+      - |
+        for dir in terraform/modules/ecr-auth-operator terraform/examples/ecr-auth-operator; do
+          terraform -chdir="${dir}" init -backend=false
+          terraform -chdir="${dir}" validate
+        done
+
   release:image:
     desc: Build and publish the controller OCI image
     cmds:

@@ -26,3 +26,9 @@ go.work
 *.swp
 *.swo
 *~
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
