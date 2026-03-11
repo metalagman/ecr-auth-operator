@@ -23,9 +23,9 @@ module "ecr_auth_operator" {
   credentials_secret_name = "aws-credentials"
   create_namespace    = true
 
-  chart_version       = "0.0.1"
+  chart_version       = "0.0.2"
   image_repository    = "ghcr.io/metalagman/ecr-auth-operator"
-  image_tag           = "0.0.1"
+  image_tag           = "0.0.2"
 
   # Keep true to let the module create IAM user + access keys.
   create_iam_user     = true

@@ -11,8 +11,8 @@ kubeconfig_context = ""
 create_iam_user = true
 
 # Optionally pin release artifacts.
-chart_version = "0.0.1"
-image_tag     = "0.0.1"
+chart_version = "0.0.2"
+image_tag     = "0.0.2"
 ```
 
 ## 2. Apply
