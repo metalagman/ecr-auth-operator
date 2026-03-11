@@ -104,7 +104,7 @@ func (r *ECRAuthReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	refreshProvider := r.TokenProvider
 	if refreshProvider == nil {
-		refreshProvider = &DefaultECRTokenProvider{}
+		return ctrl.Result{}, fmt.Errorf("token provider is not configured")
 	}
 
 	var auth ecrv1alpha1.ECRAuth

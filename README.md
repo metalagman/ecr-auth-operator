@@ -7,8 +7,7 @@ It watches namespaced `ECRAuth` custom resources (`ecr.metalagman.dev/v1alpha1`)
 ## What It Does
 
 - Watches `ECRAuth` resources across all namespaces.
-- Retrieves ECR auth tokens using controller pod IAM credentials.
-- Optionally assumes `spec.roleArn` before token retrieval.
+- Retrieves ECR auth tokens using static AWS credentials from a controller-global Kubernetes Secret.
 - Creates or updates a managed pull secret (`spec.secretName`).
 - Rejects unsafe cases:
   - Existing foreign secret with same name is not overwritten.
@@ -31,7 +30,6 @@ It watches namespaced `ECRAuth` custom resources (`ecr.metalagman.dev/v1alpha1`)
 - `secretName` (string, required): managed target secret name.
 - `region` (string, required): AWS region for ECR token retrieval.
 - `refreshInterval` (duration, optional, default `11h`): refresh cadence.
-- `roleArn` (string, optional): IAM role to assume via STS before ECR call.
 
 ### Status
 
@@ -52,8 +50,34 @@ spec:
   secretName: regcred
   region: us-east-1
   refreshInterval: 11h
-  # roleArn: arn:aws:iam::123456789012:role/ecr-reader
 ```
+
+## AWS Credentials Secret
+
+The controller requires a global Kubernetes Secret with the following keys:
+
+- `aws_access_key_id` (required)
+- `aws_secret_access_key` (required)
+- `aws_session_token` (optional)
+
+Example:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aws-credentials
+  namespace: ecr-auth-operator-system
+type: Opaque
+stringData:
+  aws_access_key_id: AKIA...
+  aws_secret_access_key: ...
+```
+
+Configure the controller with:
+
+- `--aws-credentials-secret-name`
+- `--aws-credentials-secret-namespace`
 
 ## Local Development
 
@@ -68,13 +92,13 @@ Prerequisites:
 Run tests (unit + envtest):
 
 ```sh
-make test
+task test
 ```
 
 Build:
 
 ```sh
-make build
+task build
 ```
 
 ## Deploy with Kustomize Manifests
@@ -82,13 +106,14 @@ make build
 Install CRD:
 
 ```sh
-make install
+task manifests
+kubectl apply -f config/crd/bases/ecr.metalagman.dev_ecrauths.yaml
 ```
 
 Deploy controller:
 
 ```sh
-make deploy IMG=<registry>/ecr-auth-operator:<tag>
+kubectl apply -k config/default
 ```
 
 Apply sample CR:
@@ -106,8 +131,8 @@ Chart path:
 Validate chart:
 
 ```sh
-make helm-lint
-make helm-template
+task helm-lint
+task helm-template
 ```
 
 Install:
@@ -117,7 +142,9 @@ helm upgrade --install ecr-auth-operator charts/ecr-auth-operator \
   --namespace ecr-auth-operator-system \
   --create-namespace \
   --set image.repository=<registry>/ecr-auth-operator \
-  --set image.tag=<tag>
+  --set image.tag=<tag> \
+  --set awsCredentials.secretName=aws-credentials \
+  --set awsCredentials.secretNamespace=ecr-auth-operator-system
 ```
 
 ## Operational Notes

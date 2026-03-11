@@ -40,6 +40,8 @@ spec:
             - --leader-elect
             {{- end }}
             - --health-probe-bind-address={{ .Values.healthProbeBindAddress }}
+            - --aws-credentials-secret-name={{ .Values.awsCredentials.secretName }}
+            - --aws-credentials-secret-namespace={{ default .Release.Namespace .Values.awsCredentials.secretNamespace }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:

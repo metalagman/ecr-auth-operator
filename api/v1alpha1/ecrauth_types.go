@@ -34,10 +34,6 @@ type ECRAuthSpec struct {
 	// RefreshInterval controls how often credentials are refreshed.
 	// +kubebuilder:default:="11h"
 	RefreshInterval *metav1.Duration `json:"refreshInterval,omitempty"`
-
-	// RoleARN is an optional IAM role to assume before requesting an ECR token.
-	// +optional
-	RoleARN string `json:"roleArn,omitempty"`
 }
 
 // ECRAuthStatus defines the observed state of ECRAuth.

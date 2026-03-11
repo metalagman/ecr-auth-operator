@@ -21,12 +21,14 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -63,6 +65,8 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var awsCredentialsSecretName string
+	var awsCredentialsSecretNamespace string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -81,6 +85,18 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.StringVar(
+		&awsCredentialsSecretName,
+		"aws-credentials-secret-name",
+		envOrDefault("AWS_CREDENTIALS_SECRET_NAME", ""),
+		"Name of the Kubernetes Secret that stores AWS credentials for ECR API calls.",
+	)
+	flag.StringVar(
+		&awsCredentialsSecretNamespace,
+		"aws-credentials-secret-namespace",
+		envOrDefault("AWS_CREDENTIALS_SECRET_NAMESPACE", ""),
+		"Namespace of the Kubernetes Secret that stores AWS credentials for ECR API calls.",
+	)
 	opts := zap.Options{
 		Development: true,
 	}
@@ -88,6 +104,13 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	if strings.TrimSpace(awsCredentialsSecretName) == "" || strings.TrimSpace(awsCredentialsSecretNamespace) == "" {
+		setupLog.Error(nil, "aws credentials secret configuration is required",
+			"aws-credentials-secret-name", awsCredentialsSecretName,
+			"aws-credentials-secret-namespace", awsCredentialsSecretNamespace)
+		os.Exit(1)
+	}
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -205,6 +228,13 @@ func main() {
 	if err := (&controller.ECRAuthReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		TokenProvider: &controller.KubernetesSecretECRTokenProvider{
+			Client: mgr.GetClient(),
+			SecretRef: types.NamespacedName{
+				Name:      awsCredentialsSecretName,
+				Namespace: awsCredentialsSecretNamespace,
+			},
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ECRAuth")
 		os.Exit(1)
@@ -241,4 +271,11 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func envOrDefault(key string, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
 }

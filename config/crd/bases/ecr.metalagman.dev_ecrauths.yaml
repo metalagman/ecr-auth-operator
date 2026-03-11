@@ -56,10 +56,6 @@ spec:
                 description: Region is the AWS region used for ECR token retrieval.
                 minLength: 1
                 type: string
-              roleArn:
-                description: RoleARN is an optional IAM role to assume before requesting
-                  an ECR token.
-                type: string
               secretName:
                 description: |-
                   SecretName is the managed pull-secret name that will be created/updated in

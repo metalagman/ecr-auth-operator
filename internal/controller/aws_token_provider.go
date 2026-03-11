@@ -20,35 +20,60 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ecrv1alpha1 "github.com/metalagman/ecr-auth-operator/api/v1alpha1"
 )
 
-// DefaultECRTokenProvider retrieves authorization tokens from AWS ECR.
-type DefaultECRTokenProvider struct{}
+const (
+	awsAccessKeyIDDataKey     = "aws_access_key_id"
+	awsSecretAccessKeyDataKey = "aws_secret_access_key"
+	awsSessionTokenDataKey    = "aws_session_token"
+)
+
+// KubernetesSecretECRTokenProvider retrieves authorization tokens from AWS ECR
+// using static AWS credentials loaded from a controller-global Kubernetes Secret.
+type KubernetesSecretECRTokenProvider struct {
+	Client    client.Reader
+	SecretRef types.NamespacedName
+}
 
 // GetAuthorizationToken returns decoded ECR auth credentials and endpoint.
-func (p *DefaultECRTokenProvider) GetAuthorizationToken(
+func (p *KubernetesSecretECRTokenProvider) GetAuthorizationToken(
 	ctx context.Context,
 	spec ecrv1alpha1.ECRAuthSpec,
 ) (*ECRAuthorizationToken, error) {
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(spec.Region))
-	if err != nil {
-		return nil, fmt.Errorf("load aws config: %w", err)
+	if p.Client == nil {
+		return nil, fmt.Errorf("aws credentials provider client is not configured")
+	}
+	if strings.TrimSpace(p.SecretRef.Name) == "" || strings.TrimSpace(p.SecretRef.Namespace) == "" {
+		return nil, fmt.Errorf("aws credentials secret reference is not fully configured")
 	}
 
-	if spec.RoleARN != "" {
-		cfg, err = assumeRole(ctx, cfg, spec.RoleARN)
-		if err != nil {
-			return nil, err
-		}
+	creds, err := p.loadStaticCredentials(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := config.LoadDefaultConfig(
+		ctx,
+		config.WithRegion(spec.Region),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+			creds.accessKeyID,
+			creds.secretAccessKey,
+			creds.sessionToken,
+		)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load aws config: %w", err)
 	}
 
 	ecrClient := ecr.NewFromConfig(cfg)
@@ -83,24 +108,34 @@ func (p *DefaultECRTokenProvider) GetAuthorizationToken(
 	}, nil
 }
 
-func assumeRole(ctx context.Context, cfg aws.Config, roleARN string) (aws.Config, error) {
-	stsClient := sts.NewFromConfig(cfg)
-	sessionName := fmt.Sprintf("ecr-auth-operator-%d", time.Now().UTC().Unix())
-	res, err := stsClient.AssumeRole(ctx, &sts.AssumeRoleInput{
-		RoleArn:         aws.String(roleARN),
-		RoleSessionName: aws.String(sessionName),
-	})
-	if err != nil {
-		return aws.Config{}, fmt.Errorf("assume role %q: %w", roleARN, err)
-	}
-	if res.Credentials == nil {
-		return aws.Config{}, fmt.Errorf("assume role %q: empty credentials", roleARN)
+type staticAWSCredentials struct {
+	accessKeyID     string
+	secretAccessKey string
+	sessionToken    string
+}
+
+func (p *KubernetesSecretECRTokenProvider) loadStaticCredentials(ctx context.Context) (*staticAWSCredentials, error) {
+	secret := &corev1.Secret{}
+	if err := p.Client.Get(ctx, p.SecretRef, secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("aws credentials secret %s/%s not found", p.SecretRef.Namespace, p.SecretRef.Name)
+		}
+		return nil, fmt.Errorf("read aws credentials secret %s/%s: %w", p.SecretRef.Namespace, p.SecretRef.Name, err)
 	}
 
-	cfg.Credentials = credentials.NewStaticCredentialsProvider(
-		aws.ToString(res.Credentials.AccessKeyId),
-		aws.ToString(res.Credentials.SecretAccessKey),
-		aws.ToString(res.Credentials.SessionToken),
-	)
-	return cfg, nil
+	accessKeyID := strings.TrimSpace(string(secret.Data[awsAccessKeyIDDataKey]))
+	if accessKeyID == "" {
+		return nil, fmt.Errorf("aws credentials secret %s/%s missing %q", p.SecretRef.Namespace, p.SecretRef.Name, awsAccessKeyIDDataKey)
+	}
+
+	secretAccessKey := strings.TrimSpace(string(secret.Data[awsSecretAccessKeyDataKey]))
+	if secretAccessKey == "" {
+		return nil, fmt.Errorf("aws credentials secret %s/%s missing %q", p.SecretRef.Namespace, p.SecretRef.Name, awsSecretAccessKeyDataKey)
+	}
+
+	return &staticAWSCredentials{
+		accessKeyID:     accessKeyID,
+		secretAccessKey: secretAccessKey,
+		sessionToken:    strings.TrimSpace(string(secret.Data[awsSessionTokenDataKey])),
+	}, nil
 }

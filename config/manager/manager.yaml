@@ -63,6 +63,8 @@ spec:
         args:
           - --leader-elect
           - --health-probe-bind-address=:8081
+          - --aws-credentials-secret-name=aws-credentials
+          - --aws-credentials-secret-namespace=system
         image: controller:latest
         name: manager
         ports: []
