@@ -19,10 +19,12 @@ module "ecr_auth_operator" {
   source = "../../modules/ecr-auth-operator"
 
   basename            = "ecr-auth"
-  # release_name defaults to "${basename}-operator"
-  # operator_namespace defaults to "${basename}-operator-system"
-  # credentials_secret_name defaults to "${basename}-aws-credentials"
+  # Used only for AWS resources:
+  # iam_user_name defaults to "${basename}-operator"
 
+  release_name        = "ecr-auth-operator"
+  operator_namespace  = "ecr-auth-operator-system"
+  credentials_secret_name = "aws-credentials"
   create_namespace    = true
 
   chart_version       = "0.0.1"
@@ -31,7 +33,6 @@ module "ecr_auth_operator" {
 
   # Keep true to let the module create IAM user + access keys.
   create_iam_user     = true
-  # iam_user_name defaults to "${basename}-operator"
 }
 ```
 

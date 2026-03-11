@@ -4,25 +4,12 @@ locals {
   effective_iam_user_name = (
     var.iam_user_name != null && trimspace(var.iam_user_name) != ""
   ) ? trimspace(var.iam_user_name) : "${local.basename}-operator"
+  credentials_secret_namespace = coalesce(var.credentials_secret_namespace, var.operator_namespace)
 
-  effective_operator_namespace = (
-    var.operator_namespace != null && trimspace(var.operator_namespace) != ""
-  ) ? trimspace(var.operator_namespace) : "${local.basename}-operator-system"
-
-  effective_release_name = (
-    var.release_name != null && trimspace(var.release_name) != ""
-  ) ? trimspace(var.release_name) : "${local.basename}-operator"
-
-  effective_credentials_secret_name = (
-    var.credentials_secret_name != null && trimspace(var.credentials_secret_name) != ""
-  ) ? trimspace(var.credentials_secret_name) : "${local.basename}-aws-credentials"
-
-  credentials_secret_namespace = coalesce(var.credentials_secret_namespace, local.effective_operator_namespace)
-
-  operator_namespace_effective = var.create_namespace ? kubernetes_namespace_v1.operator[0].metadata[0].name : local.effective_operator_namespace
+  operator_namespace_effective = var.create_namespace ? kubernetes_namespace_v1.operator[0].metadata[0].name : var.operator_namespace
 
   credentials_secret_namespace_effective = (
-    var.create_namespace && local.credentials_secret_namespace == local.effective_operator_namespace
+    var.create_namespace && local.credentials_secret_namespace == var.operator_namespace
   ) ? kubernetes_namespace_v1.operator[0].metadata[0].name : local.credentials_secret_namespace
 
   effective_access_key_id     = var.create_iam_user ? aws_iam_access_key.operator[0].id : var.aws_access_key_id
@@ -68,13 +55,13 @@ resource "kubernetes_namespace_v1" "operator" {
   count = var.create_namespace ? 1 : 0
 
   metadata {
-    name = local.effective_operator_namespace
+    name = var.operator_namespace
   }
 }
 
 resource "kubernetes_secret_v1" "aws_credentials" {
   metadata {
-    name      = local.effective_credentials_secret_name
+    name      = var.credentials_secret_name
     namespace = local.credentials_secret_namespace_effective
   }
 
@@ -92,7 +79,7 @@ resource "kubernetes_secret_v1" "aws_credentials" {
 }
 
 resource "helm_release" "operator" {
-  name             = local.effective_release_name
+  name             = var.release_name
   repository       = var.chart_repository
   chart            = var.chart_name
   version          = var.chart_version

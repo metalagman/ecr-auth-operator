@@ -1,5 +1,5 @@
 variable "basename" {
-  description = "Base name prefix used for default resource names (for example: ecr-auth)."
+  description = "Base name prefix for AWS IAM resources created by this module (for example: ecr-auth)."
   type        = string
   default     = "ecr-auth"
 
@@ -65,9 +65,9 @@ variable "aws_session_token" {
 }
 
 variable "operator_namespace" {
-  description = "Namespace where the operator Helm release is installed. Null uses <basename>-operator-system."
+  description = "Namespace where the operator Helm release is installed."
   type        = string
-  default     = null
+  default     = "ecr-auth-operator-system"
 }
 
 variable "create_namespace" {
@@ -77,9 +77,9 @@ variable "create_namespace" {
 }
 
 variable "credentials_secret_name" {
-  description = "Name of the Kubernetes Secret containing AWS credentials for the operator. Null uses <basename>-aws-credentials."
+  description = "Name of the Kubernetes Secret containing AWS credentials for the operator."
   type        = string
-  default     = null
+  default     = "aws-credentials"
 }
 
 variable "credentials_secret_namespace" {
@@ -89,9 +89,9 @@ variable "credentials_secret_namespace" {
 }
 
 variable "release_name" {
-  description = "Helm release name. Null uses <basename>-operator."
+  description = "Helm release name."
   type        = string
-  default     = null
+  default     = "ecr-auth-operator"
 }
 
 variable "chart_repository" {

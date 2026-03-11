@@ -22,7 +22,7 @@ variable "create_iam_user" {
 }
 
 variable "basename" {
-  description = "Base resource name prefix (for example: ecr-auth)."
+  description = "Base name prefix for AWS IAM resources (for example: ecr-auth)."
   type        = string
   default     = "ecr-auth"
 }
@@ -55,9 +55,9 @@ variable "aws_session_token" {
 }
 
 variable "operator_namespace" {
-  description = "Optional explicit namespace override."
+  description = "Namespace where the operator is installed."
   type        = string
-  default     = null
+  default     = "ecr-auth-operator-system"
 }
 
 variable "create_namespace" {
@@ -66,9 +66,9 @@ variable "create_namespace" {
 }
 
 variable "credentials_secret_name" {
-  description = "Optional explicit credentials secret name override."
+  description = "Kubernetes secret name for AWS credentials."
   type        = string
-  default     = null
+  default     = "aws-credentials"
 }
 
 variable "credentials_secret_namespace" {
@@ -77,9 +77,9 @@ variable "credentials_secret_namespace" {
 }
 
 variable "release_name" {
-  description = "Optional explicit Helm release name override."
+  description = "Helm release name."
   type        = string
-  default     = null
+  default     = "ecr-auth-operator"
 }
 
 variable "chart_repository" {
