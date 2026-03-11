@@ -6,7 +6,7 @@ on:
       - 'v*.*.*'
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -59,3 +59,16 @@ jobs:
           CHART_OCI_REPO: oci://ghcr.io/metalagman/charts
         run: |
           task release:all VERSION="${VERSION}" IMAGE_REPO="${IMAGE_REPO}" CHART_OCI_REPO="${CHART_OCI_REPO}"
+
+  github-release:
+    name: Create GitHub Release
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Draft GitHub release from tag
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
