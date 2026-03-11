@@ -185,6 +185,6 @@ The release workflow is defined in:
 
 ## License
 
-Copyright 2026.
+Copyright 2026 metalagman.
 
 Licensed under the Apache License, Version 2.0.
