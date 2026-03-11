@@ -1,0 +1,24 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "ecr-auth-operator.fullname" . }}-manager-role
+  labels:
+    {{- include "ecr-auth-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["ecr.metalagman.dev"]
+    resources: ["ecrauths"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["ecr.metalagman.dev"]
+    resources: ["ecrauths/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["ecr.metalagman.dev"]
+    resources: ["ecrauths/finalizers"]
+    verbs: ["update"]
+{{- end }}

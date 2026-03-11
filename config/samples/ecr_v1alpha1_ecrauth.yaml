@@ -1,0 +1,12 @@
+apiVersion: ecr.metalagman.dev/v1alpha1
+kind: ECRAuth
+metadata:
+  labels:
+    app.kubernetes.io/name: ecr-auth-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: ecrauth-sample
+spec:
+  secretName: regcred
+  region: us-east-1
+  refreshInterval: 11h
+  # roleArn: arn:aws:iam::123456789012:role/ecr-reader

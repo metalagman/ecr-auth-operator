@@ -1,0 +1,35 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/metalagman/ecr-auth-operator
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+podLabels: {}
+podAnnotations: {}
+
+leaderElection: true
+healthProbeBindAddress: ":8081"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+rbac:
+  create: true

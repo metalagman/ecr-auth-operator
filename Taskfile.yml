@@ -1,0 +1,78 @@
+version: '3'
+
+vars:
+  LOCALBIN: '{{.ROOT_DIR}}/bin'
+  CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen'
+  ENVTEST: '{{.LOCALBIN}}/setup-envtest'
+  CONTROLLER_TOOLS_VERSION: v0.18.0
+
+env:
+  GOCACHE: '{{.ROOT_DIR}}/.cache/go-build'
+  GOMODCACHE: /tmp/go/pkg/mod
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list-all
+
+  tools:
+    desc: Install local tool binaries used by tasks
+    cmds:
+      - |
+        if [ ! -x "{{.CONTROLLER_GEN}}" ]; then
+          GOBIN="{{.LOCALBIN}}" go install sigs.k8s.io/controller-tools/cmd/controller-gen@{{.CONTROLLER_TOOLS_VERSION}}
+        fi
+      - |
+        if [ ! -x "{{.ENVTEST}}" ]; then
+          GOBIN="{{.LOCALBIN}}" go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.21
+        fi
+
+  manifests:
+    desc: Generate CRD and RBAC manifests
+    deps: [tools]
+    cmds:
+      - '{{.CONTROLLER_GEN}} rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases'
+
+  generate:
+    desc: Generate DeepCopy methods
+    deps: [tools]
+    cmds:
+      - '{{.CONTROLLER_GEN}} object:headerFile="hack/boilerplate.go.txt" paths="./..."'
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - gofmt -w ./api ./cmd ./internal ./test
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Run unit and envtest-based controller tests (excluding e2e)
+    deps: [manifests, generate, tools]
+    env:
+      ENVTEST_K8S_VERSION:
+        sh: go list -m -f "{{"{{"}} .Version {{"}}"}}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $3}'
+    cmds:
+      - |
+        KUBEBUILDER_ASSETS="$({{.ENVTEST}} use ${ENVTEST_K8S_VERSION} --bin-dir {{.LOCALBIN}} -p path)" \
+        go test $(go list ./... | grep -v /e2e) -coverprofile cover.out
+
+  build:
+    desc: Build manager binary
+    deps: [manifests, generate, vet]
+    cmds:
+      - go build -o bin/manager cmd/main.go
+
+  helm-lint:
+    desc: Lint Helm chart
+    cmds:
+      - helm lint charts/ecr-auth-operator
+
+  helm-template:
+    desc: Render Helm chart templates
+    cmds:
+      - helm template ecr-auth-operator charts/ecr-auth-operator > /dev/null

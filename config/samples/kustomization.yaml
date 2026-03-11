@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- ecr_v1alpha1_ecrauth.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
