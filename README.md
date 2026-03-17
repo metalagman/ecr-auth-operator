@@ -105,7 +105,58 @@ Build:
 task build
 ```
 
-## Deploy with Kustomize Manifests
+## Installation and Deployment
+
+### Deploy with Terraform (recommended)
+
+This repo includes a Terraform module that installs the Helm release and, by default, provisions:
+
+- IAM user for the operator
+- IAM inline policy for ECR auth/pull actions
+- IAM access key for that user
+- Kubernetes AWS credentials secret used by the controller
+
+- Module: `terraform/modules/ecr-auth-operator`
+- Example: `terraform/examples/ecr-auth-operator`
+- GitHub module source: `github.com/metalagman/ecr-auth-operator//terraform/modules/ecr-auth-operator?ref=v0.0.2`
+
+Set `create_iam_user = false` if you want to use existing AWS credentials instead of creating IAM resources.
+
+Quick start:
+
+```sh
+cd terraform/examples/ecr-auth-operator
+terraform init
+terraform apply
+```
+
+### Deploy with Helm (OCI from GHCR)
+
+OCI chart:
+
+- `oci://ghcr.io/metalagman/charts/ecr-auth-operator`
+
+Install:
+
+```sh
+helm upgrade --install ecr-auth-operator oci://ghcr.io/metalagman/charts/ecr-auth-operator \
+  --version <chart-version> \
+  --namespace ecr-auth-operator-system \
+  --create-namespace \
+  --set image.repository=ghcr.io/metalagman/ecr-auth-operator \
+  --set image.tag=<image-tag> \
+  --set awsCredentials.secretName=aws-credentials \
+  --set awsCredentials.secretNamespace=ecr-auth-operator-system
+```
+
+Local chart validation during development:
+
+```sh
+task helm-lint
+task helm-template
+```
+
+### Deploy with Kustomize manifests
 
 Install CRD:
 
@@ -124,47 +175,6 @@ Apply sample CR:
 
 ```sh
 kubectl apply -f config/samples/ecr_v1alpha1_ecrauth.yaml
-```
-
-## Deploy with Helm
-
-Chart path:
-
-- `charts/ecr-auth-operator`
-
-Validate chart:
-
-```sh
-task helm-lint
-task helm-template
-```
-
-Install:
-
-```sh
-helm upgrade --install ecr-auth-operator charts/ecr-auth-operator \
-  --namespace ecr-auth-operator-system \
-  --create-namespace \
-  --set image.repository=<registry>/ecr-auth-operator \
-  --set image.tag=<tag> \
-  --set awsCredentials.secretName=aws-credentials \
-  --set awsCredentials.secretNamespace=ecr-auth-operator-system
-```
-
-## Deploy with Terraform
-
-This repo includes a Terraform module that provisions IAM credentials, creates the Kubernetes AWS credentials secret, and installs the Helm chart:
-
-- Module: `terraform/modules/ecr-auth-operator`
-- Example: `terraform/examples/ecr-auth-operator`
-- GitHub module source: `github.com/metalagman/ecr-auth-operator//terraform/modules/ecr-auth-operator?ref=v0.0.2`
-
-Quick start:
-
-```sh
-cd terraform/examples/ecr-auth-operator
-terraform init
-terraform apply
 ```
 
 ## OCI Release Publishing
