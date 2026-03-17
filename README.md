@@ -4,6 +4,8 @@
 
 It watches namespaced `ECRAuth` custom resources (`ecr.metalagman.dev/v1alpha1`) and creates/refreshes the target secret in the same namespace.
 
+For local setup and contributor commands, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## What It Does
 
 - Watches `ECRAuth` resources across all namespaces.
@@ -83,28 +85,6 @@ Configure the controller with:
 - `--aws-credentials-secret-name`
 - `--aws-credentials-secret-namespace`
 
-## Local Development
-
-Prerequisites:
-
-- Go 1.24+
-- Docker
-- kubectl
-- Access to a Kubernetes cluster
-- Helm (for chart validation/install)
-
-Run tests (unit + envtest):
-
-```sh
-task test
-```
-
-Build:
-
-```sh
-task build
-```
-
 ## Installation and Deployment
 
 ### Deploy with Terraform (recommended)
@@ -118,7 +98,7 @@ This repo includes a Terraform module that installs the Helm release and, by def
 
 - Module: `terraform/modules/ecr-auth-operator`
 - Example: `terraform/examples/ecr-auth-operator`
-- GitHub module source: `github.com/metalagman/ecr-auth-operator//terraform/modules/ecr-auth-operator?ref=v0.0.2`
+- GitHub module source: `github.com/metalagman/ecr-auth-operator//terraform/modules/ecr-auth-operator?ref=v0.0.5`
 
 Set `create_iam_user = false` if you want to use existing AWS credentials instead of creating IAM resources.
 
@@ -140,21 +120,16 @@ Install:
 
 ```sh
 helm upgrade --install ecr-auth-operator oci://ghcr.io/metalagman/charts/ecr-auth-operator \
-  --version <chart-version> \
+  --version 0.0.5 \
   --namespace ecr-auth-operator-system \
   --create-namespace \
   --set image.repository=ghcr.io/metalagman/ecr-auth-operator \
-  --set image.tag=<image-tag> \
+  --set image.tag=0.0.5 \
   --set awsCredentials.secretName=aws-credentials \
   --set awsCredentials.secretNamespace=ecr-auth-operator-system
 ```
 
-Local chart validation during development:
-
-```sh
-task helm-lint
-task helm-template
-```
+For local chart validation commands, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Deploy with Kustomize manifests
 
@@ -184,7 +159,7 @@ GitHub Actions publishes OCI artifacts on semver tags (`vX.Y.Z`) using Taskfile 
 - Controller image: `ghcr.io/metalagman/ecr-auth-operator:<version>` and `:latest`
 - Helm chart: `oci://ghcr.io/metalagman/charts/ecr-auth-operator:<version>`
 
-The release workflow is defined in:
+The release workflow is defined in and triggered by semver tags (`v*.*.*`):
 
 - `.github/workflows/release.yml`
 

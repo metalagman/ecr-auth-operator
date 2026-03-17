@@ -88,7 +88,7 @@ variable "chart_name" {
 
 variable "chart_version" {
   type    = string
-  default = "0.0.2"
+  default = "0.0.5"
 }
 
 variable "image_repository" {
@@ -98,5 +98,5 @@ variable "image_repository" {
 
 variable "image_tag" {
   type    = string
-  default = "0.0.2"
+  default = "0.0.5"
 }

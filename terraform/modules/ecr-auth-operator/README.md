@@ -18,16 +18,16 @@ This module installs `ecr-auth-operator` with Helm and prepares AWS credentials 
 
 ```hcl
 module "ecr_auth_operator" {
-  source = "github.com/metalagman/ecr-auth-operator//terraform/modules/ecr-auth-operator?ref=v0.0.2"
+  source = "github.com/metalagman/ecr-auth-operator//terraform/modules/ecr-auth-operator?ref=v0.0.5"
 
   release_name        = "ecr-auth-operator"
   operator_namespace  = "ecr-auth-operator-system"
   credentials_secret_name = "aws-credentials"
   create_namespace    = true
 
-  chart_version       = "0.0.2"
+  chart_version       = "0.0.5"
   image_repository    = "ghcr.io/metalagman/ecr-auth-operator"
-  image_tag           = "0.0.2"
+  image_tag           = "0.0.5"
 
   # Keep true to let the module create IAM user + access keys.
   create_iam_user     = true
@@ -42,7 +42,7 @@ module "ecr_auth_operator" {
 
 ```hcl
 module "ecr_auth_operator" {
-  source = "github.com/metalagman/ecr-auth-operator//terraform/modules/ecr-auth-operator?ref=v0.0.2"
+  source = "github.com/metalagman/ecr-auth-operator//terraform/modules/ecr-auth-operator?ref=v0.0.5"
 
   create_iam_user       = false
   aws_access_key_id     = var.aws_access_key_id
