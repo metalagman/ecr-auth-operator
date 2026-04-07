@@ -157,7 +157,7 @@ var _ = Describe("ECRAuth Controller", func() {
 			Name:      resource.Name,
 		}})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(Equal(defaultRefreshInterval))
+		Expect(result.RequeueAfter).To(Equal(authErrorRetryInterval))
 
 		updated := &ecrv1alpha1.ECRAuth{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: resource.Name}, updated)).To(Succeed())
@@ -169,6 +169,58 @@ var _ = Describe("ECRAuth Controller", func() {
 		persisted := &corev1.Secret{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: "regcred"}, persisted)).To(Succeed())
 		Expect(persisted.Type).To(Equal(corev1.SecretTypeOpaque))
+	})
+
+	It("recovers after unmanaged secret conflict is removed", func() {
+		foreign := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "regcred", Namespace: namespace},
+			Type:       corev1.SecretTypeOpaque,
+			Data:       map[string][]byte{"x": []byte("y")},
+		}
+		Expect(k8sClient.Create(ctx, foreign)).To(Succeed())
+
+		resource := &ecrv1alpha1.ECRAuth{
+			ObjectMeta: metav1.ObjectMeta{Name: "auth-b-recover", Namespace: namespace},
+			Spec: ecrv1alpha1.ECRAuthSpec{
+				SecretName: "regcred",
+				Registries: []string{"123456789012.dkr.ecr.us-east-1.amazonaws.com"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+		firstResult, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+			Namespace: namespace,
+			Name:      resource.Name,
+		}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(firstResult.RequeueAfter).To(Equal(authErrorRetryInterval))
+
+		updated := &ecrv1alpha1.ECRAuth{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: resource.Name}, updated)).To(Succeed())
+		cond := readyCondition(updated)
+		Expect(cond).NotTo(BeNil())
+		Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(cond.Reason).To(Equal(reasonSecretConflict))
+
+		Expect(k8sClient.Delete(ctx, foreign)).To(Succeed())
+
+		secondResult, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+			Namespace: namespace,
+			Name:      resource.Name,
+		}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(secondResult.RequeueAfter).To(Equal(defaultRefreshInterval))
+
+		managed := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: "regcred"}, managed)).To(Succeed())
+		Expect(managed.Type).To(Equal(corev1.SecretTypeDockerConfigJson))
+		Expect(managed.Labels).To(HaveKeyWithValue(managedByLabelKey, managedByLabelValue))
+
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: resource.Name}, updated)).To(Succeed())
+		cond = readyCondition(updated)
+		Expect(cond).NotTo(BeNil())
+		Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		Expect(cond.Reason).To(Equal(reasonReconciled))
 	})
 
 	It("rejects second ECRAuth managing same secret", func() {
@@ -194,7 +246,7 @@ var _ = Describe("ECRAuth Controller", func() {
 			Name:      secondary.Name,
 		}})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(Equal(defaultRefreshInterval))
+		Expect(result.RequeueAfter).To(Equal(authErrorRetryInterval))
 
 		updated := &ecrv1alpha1.ECRAuth{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: secondary.Name}, updated)).To(Succeed())

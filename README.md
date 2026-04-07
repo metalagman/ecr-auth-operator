@@ -168,6 +168,22 @@ The release workflow is defined in and triggered by semver tags (`v*.*.*`):
 - Managed secrets are labeled `ecr.metalagman.dev/managed-by=ecr-auth-operator`.
 - On CR deletion, managed secret cleanup relies on owner references (garbage collection).
 - If `secretName` changes, the previous managed secret owned by the same CR is cleaned up by reconcile.
+- Conflict states (`SecretConflict`, `DuplicateSecretName`) retry every minute (bounded by `spec.refreshInterval`).
+
+### Manual Force Reconcile
+
+If you need to trigger immediate reconciliation for one `ECRAuth` object:
+
+```sh
+kubectl annotate ecrauth <name> -n <namespace> ecr.metalagman.dev/force-reconcile="$(date +%s)" --overwrite
+```
+
+Verify recovery:
+
+```sh
+kubectl get ecrauth <name> -n <namespace> -o yaml
+kubectl get secret <secretName> -n <namespace>
+```
 
 ## License
 

@@ -145,7 +145,7 @@ func (r *ECRAuthReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			if statusErr := r.setCondition(ctx, &auth, metav1.ConditionFalse, reasonSecretConflict, msg, nil); statusErr != nil {
 				return ctrl.Result{}, fmt.Errorf("%w: %v", errConditionUpdateFailed, statusErr)
 			}
-			return ctrl.Result{RequeueAfter: refreshInterval}, nil
+			return ctrl.Result{RequeueAfter: minDuration(refreshInterval, authErrorRetryInterval)}, nil
 		}
 
 		if !secretOwnedBy(existingSecret, &auth) {
@@ -153,7 +153,7 @@ func (r *ECRAuthReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			if statusErr := r.setCondition(ctx, &auth, metav1.ConditionFalse, reasonDuplicateSecretName, msg, nil); statusErr != nil {
 				return ctrl.Result{}, fmt.Errorf("%w: %v", errConditionUpdateFailed, statusErr)
 			}
-			return ctrl.Result{RequeueAfter: refreshInterval}, nil
+			return ctrl.Result{RequeueAfter: minDuration(refreshInterval, authErrorRetryInterval)}, nil
 		}
 	}
 
