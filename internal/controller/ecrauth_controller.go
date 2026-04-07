@@ -145,7 +145,7 @@ func (r *ECRAuthReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			if statusErr := r.setCondition(ctx, &auth, metav1.ConditionFalse, reasonSecretConflict, msg, nil); statusErr != nil {
 				return ctrl.Result{}, fmt.Errorf("%w: %v", errConditionUpdateFailed, statusErr)
 			}
-			return ctrl.Result{RequeueAfter: minDuration(refreshInterval, authErrorRetryInterval)}, nil
+			return ctrl.Result{RequeueAfter: boundedRetryInterval(refreshInterval)}, nil
 		}
 
 		if !secretOwnedBy(existingSecret, &auth) {
@@ -153,7 +153,7 @@ func (r *ECRAuthReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			if statusErr := r.setCondition(ctx, &auth, metav1.ConditionFalse, reasonDuplicateSecretName, msg, nil); statusErr != nil {
 				return ctrl.Result{}, fmt.Errorf("%w: %v", errConditionUpdateFailed, statusErr)
 			}
-			return ctrl.Result{RequeueAfter: minDuration(refreshInterval, authErrorRetryInterval)}, nil
+			return ctrl.Result{RequeueAfter: boundedRetryInterval(refreshInterval)}, nil
 		}
 	}
 
@@ -164,7 +164,7 @@ func (r *ECRAuthReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return ctrl.Result{}, fmt.Errorf("%w: %v", errConditionUpdateFailed, statusErr)
 		}
 		logger.Error(err, "failed to get authorization tokens")
-		return ctrl.Result{RequeueAfter: minDuration(refreshInterval, authErrorRetryInterval)}, nil
+		return ctrl.Result{RequeueAfter: boundedRetryInterval(refreshInterval)}, nil
 	}
 
 	dockerConfigJSON, err := buildDockerConfigJSON(tokens)
@@ -172,7 +172,7 @@ func (r *ECRAuthReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if statusErr := r.setCondition(ctx, &auth, metav1.ConditionFalse, reasonAuthFetchFailed, err.Error(), nil); statusErr != nil {
 			return ctrl.Result{}, fmt.Errorf("%w: %v", errConditionUpdateFailed, statusErr)
 		}
-		return ctrl.Result{RequeueAfter: minDuration(refreshInterval, authErrorRetryInterval)}, nil
+		return ctrl.Result{RequeueAfter: boundedRetryInterval(refreshInterval)}, nil
 	}
 
 	if err := r.upsertManagedSecret(ctx, &auth, existingSecret, secretExists, dockerConfigJSON); err != nil {
@@ -436,9 +436,9 @@ func decodeAuthorizationToken(encodedToken string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
-func minDuration(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
+func boundedRetryInterval(refreshInterval time.Duration) time.Duration {
+	if refreshInterval < authErrorRetryInterval {
+		return refreshInterval
 	}
-	return b
+	return authErrorRetryInterval
 }
