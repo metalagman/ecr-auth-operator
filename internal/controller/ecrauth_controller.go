@@ -35,9 +35,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	ecrv1alpha1 "github.com/metalagman/ecr-auth-operator/api/v1alpha1"
@@ -193,11 +196,26 @@ func (r *ECRAuthReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ECRAuthReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// A successful refresh writes both the Secret and ECRAuth status. Neither
+	// write should immediately trigger another ECR token request.
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&ecrv1alpha1.ECRAuth{}).
-		Owns(&corev1.Secret{}).
+		For(&ecrv1alpha1.ECRAuth{}, builder.WithPredicates(ecrauthEvents())).
+		Owns(&corev1.Secret{}, builder.WithPredicates(managedSecretEvents())).
 		Named("ecrauth").
 		Complete(r)
+}
+
+func ecrauthEvents() predicate.Predicate {
+	return predicate.Or(predicate.GenerationChangedPredicate{}, predicate.AnnotationChangedPredicate{})
+}
+
+func managedSecretEvents() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc:  func(event.CreateEvent) bool { return false },
+		UpdateFunc:  func(event.UpdateEvent) bool { return false },
+		DeleteFunc:  func(event.DeleteEvent) bool { return true },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
 }
 
 func (r *ECRAuthReconciler) cleanupPreviousSecretIfNeeded(ctx context.Context, auth *ecrv1alpha1.ECRAuth) error {

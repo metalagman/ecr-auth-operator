@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	ecrv1alpha1 "github.com/metalagman/ecr-auth-operator/api/v1alpha1"
@@ -300,5 +301,33 @@ var _ = Describe("ECRAuth Controller", func() {
 		Expect(cond).NotTo(BeNil())
 		Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 		Expect(cond.Reason).To(Equal(reasonAuthFetchFailed))
+	})
+})
+
+var _ = Describe("ECRAuth event filters", func() {
+	It("reconciles spec and annotation changes without reacting to status writes", func() {
+		before := &ecrv1alpha1.ECRAuth{ObjectMeta: metav1.ObjectMeta{Generation: 1}}
+		filter := ecrauthEvents()
+
+		statusChange := before.DeepCopy()
+		statusChange.Status.ManagedSecretName = "regcred"
+		Expect(filter.Update(event.UpdateEvent{ObjectOld: before, ObjectNew: statusChange})).To(BeFalse())
+
+		specChange := before.DeepCopy()
+		specChange.Generation++
+		Expect(filter.Update(event.UpdateEvent{ObjectOld: before, ObjectNew: specChange})).To(BeTrue())
+
+		annotationChange := before.DeepCopy()
+		annotationChange.Annotations = map[string]string{"ecr.metalagman.dev/force-reconcile": "1"}
+		Expect(filter.Update(event.UpdateEvent{ObjectOld: before, ObjectNew: annotationChange})).To(BeTrue())
+	})
+
+	It("reconciles managed Secret deletion without reacting to its own writes", func() {
+		secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "regcred"}}
+		filter := managedSecretEvents()
+
+		Expect(filter.Create(event.CreateEvent{Object: secret})).To(BeFalse())
+		Expect(filter.Update(event.UpdateEvent{ObjectOld: secret, ObjectNew: secret})).To(BeFalse())
+		Expect(filter.Delete(event.DeleteEvent{Object: secret})).To(BeTrue())
 	})
 })
